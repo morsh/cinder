@@ -7,15 +7,20 @@ const passportAzureAD = require('passport-azure-ad');
 
 const OIDCStrategy = passportAzureAD.OIDCStrategy;
 
-let authEnabled = false;
+let authEnabled = true;
 let configAuth = require('../config/auth.basic');
-let configSetup = null;
-let redirectPath = null;
-
-if (fs.existsSync(path.join(__dirname, '..', 'config', 'setup.private.json'))) {
-  configSetup = require('../config/setup.private.json');
-  authEnabled = configSetup.enableAuthentication;
-}
+let configSetup = {
+  issuer: process.env.BT_AUTH_ISSUER,
+  clientSecret: process.env.BT_AUTH_CLIENT_SECRET,
+  clientId: process.env.BT_AUTH_CLIENT_ID,
+  allowHttp: process.env.BT_AUTH_ALLOW_HTTP && 
+             (
+               process.env.BT_AUTH_ALLOW_HTTP === "true" ||
+               process.env.BT_AUTH_ALLOW_HTTP === true
+             ),
+  redirectUrl: process.env.BT_AUTH_REDIRECT_URL
+};
+let redirectPath = configSetup.redirectUrl;
 
 // array to hold logged in users
 let users = [];
@@ -60,7 +65,7 @@ function initializePassport() {
       redirectUrl: configSetup.redirectUrl,
       allowHttpForRedirectUrl: configSetup.allowHttp,
       realm: configAuth.realm,
-      clientID: configSetup.clientID,
+      clientID: configSetup.clientId,
       clientSecret: configSetup.clientSecret,
       oidcIssuer: configAuth.issuer,
       identityMetadata: configAuth.identityMetadata,
@@ -97,27 +102,9 @@ function initializePassport() {
     }
   ));
 }
-if (authEnabled) { initializePassport(); }
+initializePassport();
 
 const router = new express.Router();
-
-/** 
- * A path to enable initializing authentication configuration and add 
- * authentication to middleware pipeline
-*/
-router.get('/init', (req, res) => {
-
-  let configSetupContent = fs.readFileSync(path.join(__dirname, '..', 'config', 'setup.private.json'), 'utf8');
-  configSetup = JSON.parse(configSetupContent);
-  authEnabled = configSetup.enableAuthentication;
-
-  if (authEnabled) {
-    initializePassport();
-    addAuthRoutes();
-  }
-
-  res.json({ success: true });
-});
 
 /** 
  * Returning logged in account information
@@ -143,64 +130,56 @@ router.get('/account', (req, res) => {
 /** 
  * Dynamically adding authentication routes once passport is initialized
 */
-function addAuthRoutes() {
+router.get('/login',
+  passport.authenticate('azuread-openidconnect', { failureRedirect: '/auth/login' }),
+  function(req, res) {
+    console.info('Login was called in the Sample');
+    res.redirect('/');
+});
 
-  router.get('/login',
-    passport.authenticate('azuread-openidconnect', { failureRedirect: '/auth/login' }),
-    function(req, res) {
-      console.info('Login was called in the Sample');
-      res.redirect('/');
-  });
-
-  // POST /auth/openid
-  //   Use passport.authenticate() as route middleware to authenticate the
-  //   request.  The first step in OpenID authentication will involve redirecting
-  //   the user to their OpenID provider.  After authenticating, the OpenID
-  //   provider will redirect the user back to this application at
-  //   /auth/openid/return
-  router.get('/openid',
-    passport.authenticate('azuread-openidconnect', { failureRedirect: '/auth/login' }),
-    function(req, res) {
-      console.info('Authentication was called in the Sample');
-      res.redirect('/');
-    });
-
-  // GET /auth/openid/return
-  //   Use passport.authenticate() as route middleware to authenticate the
-  //   request.  If authentication fails, the user will be redirected back to the
-  //   login page.  Otherwise, the primary route function function will be called,
-  //   which, in this example, will redirect the user to the home page.
-  router.get('/openid/return',
-    passport.authenticate('azuread-openidconnect', { failureRedirect: '/auth/login' }),
-    function(req, res) {
-      console.info('We received a return from AzureAD.');
-      res.redirect(redirectPath || '/');
-      redirectPath = null;
-    });
-
-  // GET /auth/openid/return
-  //   Use passport.authenticate() as route middleware to authenticate the
-  //   request.  If authentication fails, the user will be redirected back to the
-  //   login page.  Otherwise, the primary route function function will be called,
-  //   which, in this example, will redirect the user to the home page.
-  router.post('/openid/return',
-    passport.authenticate('azuread-openidconnect', { failureRedirect: '/auth/login' }),
-    function(req, res) {
-      console.info('We received a return from AzureAD.');
-      res.redirect(redirectPath || '/');
-      redirectPath = null;
-    });
-
-  router.get('/logout', function(req, res){
-    req.logout();
+// POST /auth/openid
+//   Use passport.authenticate() as route middleware to authenticate the
+//   request.  The first step in OpenID authentication will involve redirecting
+//   the user to their OpenID provider.  After authenticating, the OpenID
+//   provider will redirect the user back to this application at
+//   /auth/openid/return
+router.get('/openid',
+  passport.authenticate('azuread-openidconnect', { failureRedirect: '/auth/login' }),
+  function(req, res) {
+    console.info('Authentication was called in the Sample');
     res.redirect('/');
   });
-}
-if (authEnabled) { 
-  console.log(`Registering auth routes...`);
-  addAuthRoutes(); 
-  console.log(`Auth routes registered.`);
-}
+
+// GET /auth/openid/return
+//   Use passport.authenticate() as route middleware to authenticate the
+//   request.  If authentication fails, the user will be redirected back to the
+//   login page.  Otherwise, the primary route function function will be called,
+//   which, in this example, will redirect the user to the home page.
+router.get('/openid/return',
+  passport.authenticate('azuread-openidconnect', { failureRedirect: '/auth/login' }),
+  function(req, res) {
+    console.info('We received a return from AzureAD.');
+    res.redirect(redirectPath || '/');
+    redirectPath = null;
+  });
+
+// GET /auth/openid/return
+//   Use passport.authenticate() as route middleware to authenticate the
+//   request.  If authentication fails, the user will be redirected back to the
+//   login page.  Otherwise, the primary route function function will be called,
+//   which, in this example, will redirect the user to the home page.
+router.post('/openid/return',
+  passport.authenticate('azuread-openidconnect', { failureRedirect: '/auth/login' }),
+  function(req, res) {
+    console.info('We received a return from AzureAD.');
+    res.redirect(redirectPath || '/');
+    redirectPath = null;
+  });
+
+router.get('/logout', function(req, res){
+  req.logout();
+  res.redirect('/');
+});
 
 /** 
  * Adding all authentication middleware on process start.
