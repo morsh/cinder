@@ -4,13 +4,12 @@
 
 - Install [yarn](https://yarnpkg.com/lang/en/docs/install/)
 
-## Installation
-
-If you don't have yarn installed:
-
 ```sh
 npm install -g yarn
 ```
+
+## Installation
+
 
 ```sh
 git clone https://github.com/morsh/cinder
