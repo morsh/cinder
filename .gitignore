@@ -2,13 +2,11 @@
 
 # dependencies
 node_modules/
+.vscode/
 
 # testing
 /coverage
 /client/coverage
-
-# build files
-/build
 
 # client build files
 /client/build
@@ -28,3 +26,4 @@ client/**/*.css
 
 # private files
 *.private.*
+.vscode/launch.json
